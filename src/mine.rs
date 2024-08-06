@@ -110,7 +110,7 @@ impl Miner {
                             // Exit if time has elapsed
                             if nonce % 100 == 0 {
                                 if timer.elapsed().as_secs().ge(&cutoff_time) {
-                                    if best_difficulty.gt(&min_difficulty) {
+                                    if best_difficulty.ge(&min_difficulty) {
                                         // Mine until min difficulty has been met
                                         break;
                                     }
@@ -126,8 +126,15 @@ impl Miner {
                             nonce += 1;
                         }
 
+                        // If best_difficulty is below min_difficulty, skip submitting the result
+                        let mut skip_difficulty = 20;
+                        if best_difficulty < skip_difficulty {
+                            println!("Thread {}: Skip (difficulty: {} < {})", i, best_difficulty, skip_difficulty);
+                            return None;
+                        }
+
                         // Return the best nonce
-                        (best_nonce, best_difficulty, best_hash)
+                        Some((best_nonce, best_difficulty, best_hash))
                     }
                 })
             })
@@ -138,11 +145,13 @@ impl Miner {
         let mut best_difficulty = 0;
         let mut best_hash = Hash::default();
         for h in handles {
-            if let Ok((nonce, difficulty, hash)) = h.join() {
-                if difficulty > best_difficulty {
-                    best_difficulty = difficulty;
-                    best_nonce = nonce;
-                    best_hash = hash;
+            if let Ok(result) = h.join() {
+                if let Some((nonce, difficulty, hash)) = result {
+                    if difficulty > best_difficulty {
+                        best_difficulty = difficulty;
+                        best_nonce = nonce;
+                        best_hash = hash;
+                    }
                 }
             }
         }

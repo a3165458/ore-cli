@@ -20,7 +20,8 @@ use crate::{
     utils::{amount_u64_to_string, get_clock, get_config, get_proof_with_authority, proof_pubkey},
     Miner,
 };
-const MIN_DIFFICULTY: u32 = 20;
+
+const MIN_DIFFICULTY: u32 = 16;
 
 impl Miner {
     pub async fn mine(&self, args: MineArgs) {
@@ -34,24 +35,31 @@ impl Miner {
         // Start mining loop
         loop {
             // Fetch proof
+            let config = get_config(&self.rpc_client).await;
             let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey()).await;
             println!(
-                "\nStake balance: {} ORE",
-                amount_u64_to_string(proof.balance)
+                "\nStake: {} ORE\n  Multiplier: {:12}x",
+                amount_u64_to_string(proof.balance),
+                calculate_multiplier(proof.balance, config.top_balance)
             );
 
             // Calc cutoff time
             let cutoff_time = self.get_cutoff(proof, args.buffer_time).await;
 
             // Run drillx
-            let config = get_config(&self.rpc_client).await;
             let solution = Self::find_hash_par(
                 proof,
                 cutoff_time,
                 args.threads,
                 config.min_difficulty as u32,
-            )
-            .await;
+            ).await;
+
+            // Check if the solution is "default" (indicating it was skipped)
+            if solution.d == Default::default() && solution.n == [0u8; 8] {
+                // Print a skip message and continue to the next loop iteration
+                println!("Skipped: got a default solution.");
+                continue;
+            }
 
             // Submit most difficult hash
             let mut compute_budget = 500_000;
@@ -70,6 +78,7 @@ impl Miner {
                 .await
                 .ok();
         }
+
     }
 
     async fn find_hash_par(
@@ -111,7 +120,7 @@ impl Miner {
                             // Exit if time has elapsed
                             if nonce % 100 == 0 {
                                 if timer.elapsed().as_secs().ge(&cutoff_time) {
-                                    if best_difficulty.gt(&MIN_DIFFICULTY) {
+                                    if best_difficulty.ge(&min_difficulty) {
                                         // Mine until min difficulty has been met
                                         break;
                                     }
@@ -146,6 +155,12 @@ impl Miner {
                     best_hash = hash;
                 }
             }
+        }
+
+        // Check if the best difficulty meets the minimum requirement
+        if best_difficulty < MIN_DIFFICULTY {
+            progress_bar.finish_with_message(format!("Skipped: (difficulty: {} < {})", best_difficulty, MIN_DIFFICULTY));
+            return Solution::new(Default::default(), [0u8; 8]); // Return a "default" Solution
         }
 
         // Update log
@@ -189,6 +204,10 @@ impl Miner {
             .saturating_sub(clock.unix_timestamp)
             .max(0) as u64
     }
+}
+
+fn calculate_multiplier(balance: u64, top_balance: u64) -> f64 {
+    1.0 + (balance as f64 / top_balance as f64).min(1.0f64)
 }
 
 // TODO Pick a better strategy (avoid draining bus)

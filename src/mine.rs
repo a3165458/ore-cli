@@ -13,6 +13,7 @@ use rand::Rng;
 use solana_program::pubkey::Pubkey;
 use solana_rpc_client::spinner;
 use solana_sdk::signer::Signer;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     args::MineArgs,
@@ -98,7 +99,8 @@ impl Miner {
                     let mut memory = equix::SolverMemory::new();
                     move || {
                         let timer = Instant::now();
-                        let mut nonce = u64::MAX.saturating_div(threads).saturating_mul(i);
+                        let time_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                        let mut nonce = time_now ^ (u64::MAX.saturating_div(threads).saturating_mul(i));
                         let mut best_nonce = nonce;
                         let mut best_difficulty = 0;
                         let mut best_hash = Hash::default();

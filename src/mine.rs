@@ -55,7 +55,7 @@ impl Miner {
             ).await;
 
             // Check if the solution is "default" (indicating it was skipped)
-            if solution.d == Default::default() && solution.n == [0u8; 8] {
+            if solution.d == [0u8; 16] && solution.n == [0u8; 8] {
                 // Print a skip message and continue to the next loop iteration
                 println!("Skipped: got a default solution.");
                 continue;
@@ -160,7 +160,7 @@ impl Miner {
         // Check if the best difficulty meets the minimum requirement
         if best_difficulty < MIN_DIFFICULTY {
             progress_bar.finish_with_message(format!("Skipped: (difficulty: {} < {})", best_difficulty, MIN_DIFFICULTY));
-            return Solution::new(Default::default(), [0u8; 8]); // Return a "default" Solution
+            return Solution::new([0u8; 16], [0u8; 8]); // Return a "default" Solution
         }
 
         // Update log
